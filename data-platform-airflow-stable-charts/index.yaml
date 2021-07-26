@@ -26,8 +26,8 @@ entries:
       url: https://github.com/global-data-team
     name: airflow
     sources:
-    - https://github.com/global-data-team/data-platform-airflow-stable-charts/tree/master/charts/airflow
+    - https://github.com/global-data-platform/data-platform-airflow-stable-charts/tree/master/charts/airflow
     urls:
-    - https://val-at-global.github.io/data-platform-airflow-stable-charts/airflow-7.16.0.tgz
-    version: 7.16.0
+    - https://val-at-global.github.io/data-platform-airflow-stable-charts/airflow-8.4.1.tgz
+    version: 8.4.1
 generated: "2021-03-01T12:29:06.224856Z"
