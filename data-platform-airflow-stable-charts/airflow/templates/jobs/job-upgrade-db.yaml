@@ -6,77 +6,62 @@ kind: Job
 metadata:
   name: {{ include "airflow.fullname" . | trunc 19 }}-db-{{ (print .Values) | sha1sum }}
   labels:
-    app: airflow
+    app: {{ include "airflow.labels.app" . }}
     component: jobs
-    chart: airflow-8.4.1
-    release: RELEASE-NAME
-    heritage: Helm
+    chart: {{ include "airflow.labels.chart" . }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
 spec:
   template:
     metadata:
       annotations:
+        {{- if .Values.airflow.podAnnotations }}
+        {{- toYaml .Values.airflow.podAnnotations | nindent 8 }}
+        {{- end }}
       labels:
-        app: airflow
+        app: {{ include "airflow.labels.app" . }}
         component: jobs
-        chart: airflow-8.4.1
-        release: RELEASE-NAME
-        heritage: Helm
+        chart: {{ include "airflow.labels.chart" . }}
+        release: {{ .Release.Name }}
+        heritage: {{ .Release.Service }}
     spec:
       restartPolicy: OnFailure
-      serviceAccountName: RELEASE-NAME
-      initContainers:        
-        - name: check-db  
-          image: apache/airflow:2.1.1-python3.8
-          imagePullPolicy: IfNotPresent
-          securityContext:
-            runAsUser: 50000
-            runAsGroup: 50000
-          envFrom:    
-            - secretRef:
-                name: "RELEASE-NAME-config"
-          env:    
-            - name: DATABASE_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: RELEASE-NAME-postgresql
-                  key: postgresql-password
-            - name: REDIS_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: RELEASE-NAME-redis
-                  key: redis-password
-          command:
-            - "/usr/bin/dumb-init"
-            - "--"
-          args:
-            - "bash"
-            - "-c"
-            - "exec timeout 60s airflow db check"
+      {{- if .Values.airflow.image.pullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.airflow.image.pullSecret }}
+      {{- end }}
+      serviceAccountName: {{ include "airflow.serviceAccountName" . }}
+      initContainers:
+        {{- if $extraPipPackages }}
+        {{- include "airflow.init_container.install_pip_packages" (dict "Release" .Release "Values" .Values "extraPipPackages" $extraPipPackages) | indent 8 }}
+        {{- end }}
+        {{- include "airflow.init_container.check_db" (dict "Release" .Release "Values" .Values "volumeMounts" $volumeMounts) | indent 8 }}
+        {{- if .Values.dags.gitSync.enabled }}
+        {{- include "airflow.container.git_sync" (dict "Release" .Release "Values" .Values "sync_one_time" "true") | indent 8 }}
+        {{- end }}
       containers:
-        - name: upgrade-db          
-          image: apache/airflow:2.1.1-python3.8
-          imagePullPolicy: IfNotPresent
-          securityContext:
-            runAsUser: 50000
-            runAsGroup: 50000
-          envFrom:            
-            - secretRef:
-                name: "RELEASE-NAME-config"
-          env:            
-            - name: DATABASE_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: RELEASE-NAME-postgresql
-                  key: postgresql-password
-            - name: REDIS_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: RELEASE-NAME-redis
-                  key: redis-password
+        - name: upgrade-db
+          {{- include "airflow.image" . | indent 10 }}
+          envFrom:
+            {{- include "airflow.envFrom" . | indent 12 }}
+          env:
+            {{- include "airflow.env" . | indent 12 }}
           command:
             - "/usr/bin/dumb-init"
             - "--"
           args:
             - "bash"
             - "-c"
+            {{- if .Values.airflow.legacyCommands }}
+            - "exec airflow upgradedb"
+            {{- else }}
             - "exec airflow db upgrade"
+            {{- end }}
+          {{- if $volumeMounts }}
+          volumeMounts:
+            {{- $volumeMounts | indent 12 }}
+          {{- end }}
+      {{- if $volumes }}
+      volumes:
+        {{- $volumes | indent 8 }}
+      {{- end }}
